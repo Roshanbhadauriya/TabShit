@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Tabshit",
+  "version": "2.0",
+  "description": "Tabshit transforms your browser's new tab into a premium visual workspace.",
+  "chrome_url_overrides": {
+    "newtab": "index.html"
+  },
+  "permissions": [
+    "bookmarks",
+    "storage",
+    "favicon"
+  ],
+  "action": {
+    "default_icon": {
+      "16": "icons/tabshit-nobg.png",
+      "48": "icons/tabshit-nobg.png",
+      "128": "icons/tabshit-nobg.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "quick-save": {
+      "suggested_key": {
+        "default": "Ctrl+B",
+        "mac": "Command+B"
+      },
+      "description": "Quickly save the current tab as a bookmark"
+    }
+  },
+  "icons": {
+    "16": "icons/tabshit-nobg.png",
+    "48": "icons/tabshit-nobg.png",
+    "128": "icons/tabshit-nobg.png"
+  }
+}
