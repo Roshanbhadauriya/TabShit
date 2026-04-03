@@ -31,9 +31,12 @@ export function useStorage(key, initialValue) {
   }, [key]);
 
   const updateValue = (newValue) => {
-    const updated = typeof newValue === 'function' ? newValue(value) : newValue;
-    setValue(updated);
-    chrome.storage.local.set({ [key]: updated });
+    setValue((prevValue) => {
+      const updated =
+        typeof newValue === "function" ? newValue(prevValue) : newValue;
+      chrome.storage.local.set({ [key]: updated });
+      return updated;
+    });
   };
 
   return [value, updateValue, isLoaded];

@@ -40,9 +40,40 @@ function cn(...inputs) {
 }
 
 export default function App() {
+  const INITIAL_BOARDS = [
+    {
+      id: "board-social",
+      title: "Social",
+      page: "home",
+      bookmarks: [
+        { title: "Facebook", url: "https://www.facebook.com" },
+        { title: "Instagram", url: "https://www.instagram.com" },
+        { title: "Twitter", url: "https://www.x.com" },
+        { title: "LinkedIn", url: "https://www.linkedin.com" },
+        { title: "Reddit", url: "https://www.reddit.com" },
+      ],
+      x: 0,
+      y: 0,
+    },
+    {
+      id: "board-entertainment",
+      title: "Entertainment",
+      page: "home",
+      bookmarks: [
+        { title: "YouTube", url: "https://www.youtube.com" },
+        { title: "Netflix", url: "https://www.netflix.com" },
+        { title: "Hotstar", url: "https://www.hotstar.com" },
+        { title: "Prime Video", url: "https://www.primevideo.com" },
+        { title: "Twitch", url: "https://www.twitch.tv" },
+      ],
+      x: 360,
+      y: 0,
+    },
+  ];
+
   const [activePage, setActivePage] = useStorage("activePage", "home");
   const [privacyMode, setPrivacyMode] = useStorage("privacyMode", false);
-  const [boards, setBoards] = useStorage("boards", []);
+  const [boards, setBoards, boardsLoaded] = useStorage("boards", INITIAL_BOARDS);
   const [pages, setPages] = useStorage("pages", ["home"]);
   const [background, setBackground] = useStorage(
     "customBackground",
@@ -67,6 +98,16 @@ export default function App() {
   const [todos, setTodos] = useStorage("todos", []);
   const [todoPos, setTodoPos] = useStorage("todoPos", null);
   const [appReady, setAppReady] = useState(false);
+  const [windowWidth, setWindowWidth] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1200,
+  );
+
+  // Resize Listener
+  React.useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // UI State
   const [isWallpaperOpen, setIsWallpaperOpen] = useState(false);
@@ -96,6 +137,24 @@ export default function App() {
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [activePageMenu]);
+
+  // Handle Keyboard Shortcuts
+  React.useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+B for toggle hover board creation
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName))
+          return;
+        e.preventDefault();
+        setSettings((prev) => ({
+          ...prev,
+          showGhostBoard: !prev.showGhostBoard,
+        }));
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Fetch Quote
   React.useEffect(() => {
@@ -189,34 +248,76 @@ export default function App() {
   const handleImport = async () => {
     if (!chrome.bookmarks) return;
     const tree = await chrome.bookmarks.getTree();
-    const bar = tree[0].children[0].children || [];
 
-    if (bar.length > 0) {
-      const importedBoard = {
-        id: "board-imported-" + Date.now(),
-        title: "Imported from Chrome",
-        page: "home",
-        bookmarks: bar.map((b) => ({ title: b.title, url: b.url })),
+    // Use functional setBoards to always work with latest state
+    setBoards((currentBoards) => {
+      const newBoards = currentBoards.map((b) => ({ ...b }));
+
+      const processNodes = (nodes, parentTitle, parentId) => {
+        const folderBookmarks = nodes.filter((child) => child.url);
+        if (folderBookmarks.length > 0) {
+          const boardId = "board-chrome-" + parentId;
+          const existingBoard = newBoards.find((b) => b.id === boardId);
+
+          if (existingBoard) {
+            // Merge: add only bookmarks whose URL doesn't already exist
+            const existingUrls = new Set(
+              existingBoard.bookmarks.map((bm) => bm.url),
+            );
+            const newEntries = folderBookmarks
+              .filter((b) => !existingUrls.has(b.url))
+              .map((b) => ({ title: b.title, url: b.url }));
+            if (newEntries.length > 0) {
+              existingBoard.bookmarks = [
+                ...existingBoard.bookmarks,
+                ...newEntries,
+              ];
+            }
+          } else {
+            newBoards.push({
+              id: boardId,
+              title: parentTitle || "Imported Board",
+              page: activePage,
+              bookmarks: folderBookmarks.map((b) => ({
+                title: b.title,
+                url: b.url,
+              })),
+            });
+          }
+        }
+
+        nodes.forEach((node) => {
+          if (node.children && node.children.length > 0) {
+            processNodes(node.children, node.title, node.id);
+          }
+        });
       };
-      setBoards([...boards, importedBoard]);
-      setActivePage("home");
-    }
+
+      if (tree[0] && tree[0].children) {
+        tree[0].children.forEach((rootChild) => {
+          if (rootChild.children && rootChild.children.length > 0) {
+            processNodes(rootChild.children, rootChild.title, rootChild.id);
+          }
+        });
+      }
+
+      return newBoards;
+    });
   };
 
+  // Auto-import bookmarks on every new tab open (wait for storage to load first)
+  React.useEffect(() => {
+    if (boardsLoaded) handleImport();
+  }, [boardsLoaded]);
+
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
   // Provide default collision-free positions
   const boardWidth = settings.isCompact ? 280 : 340;
   const gap = 20;
-  const cols = Math.max(
-    1,
-    Math.floor(
-      (typeof window !== "undefined" ? window.innerWidth - 80 : 1200) /
-        (boardWidth + gap),
-    ),
-  );
+  const cols = Math.max(1, Math.floor((windowWidth - 80) / (boardWidth + gap)));
 
   const occupiedBoxes = [];
 
@@ -259,12 +360,83 @@ export default function App() {
     return bestSpot;
   };
 
-  const positionedBoards = filteredBoards.map((b) => {
+  const finalBoardsForDisplay = useMemo(() => {
+    if (!searchQuery) return filteredBoards;
+    const q = searchQuery.toLowerCase();
+    return filteredBoards.filter(
+      (b) =>
+        b.title.toLowerCase().includes(q) ||
+        b.bookmarks.some(
+          (bm) =>
+            bm.title.toLowerCase().includes(q) ||
+            bm.url.toLowerCase().includes(q),
+        ),
+    );
+  }, [filteredBoards, searchQuery]);
+
+  const positionedBoards = finalBoardsForDisplay.map((b) => {
     if (b.x !== undefined && b.y !== undefined) return b;
     const spot = findFreeSpot();
     occupiedBoxes.push({ x: spot.x, y: spot.y, w: boardWidth, h: 320 });
     return { ...b, x: spot.x, y: spot.y };
   });
+
+  // Persist auto-assigned positions so boards stay put after resize/reload
+  React.useEffect(() => {
+    const unpositioned = boards.filter(
+      (b) => b.x === undefined || b.y === undefined,
+    );
+    if (unpositioned.length === 0) return;
+
+    // Calculate positions for unpositioned boards
+    const bw = settings.isCompact ? 280 : 340;
+    const g = 20;
+    const c = Math.max(1, Math.floor((windowWidth - 80) / (bw + g)));
+    const occupied = [];
+    boards.forEach((b) => {
+      if (b.x !== undefined && b.y !== undefined) {
+        const bmarks = b.bookmarks || [];
+        const visibleCount = Math.min(
+          bmarks.length,
+          settings.isCompact ? 5 : 10,
+        );
+        const estHeight =
+          (settings.isCompact ? 56 : 64) +
+          visibleCount * (settings.isCompact ? 32 : 44) +
+          20;
+        occupied.push({ x: b.x, y: b.y, w: bw, h: estHeight });
+      }
+    });
+
+    const findSpot = () => {
+      let bestSpot = { x: 0, y: 0 };
+      let minPy = Infinity;
+      for (let col = 0; col < c; col++) {
+        const px = col * (bw + g);
+        const boxesInCol = occupied.filter(
+          (box) => px < box.x + box.w && px + bw > box.x,
+        );
+        let py = 0;
+        if (boxesInCol.length > 0) {
+          py = Math.max(...boxesInCol.map((b) => b.y + b.h)) + g;
+        }
+        if (py < minPy) {
+          minPy = py;
+          bestSpot = { x: px, y: py };
+        }
+      }
+      return bestSpot;
+    };
+
+    setBoards((prev) =>
+      prev.map((b) => {
+        if (b.x !== undefined && b.y !== undefined) return b;
+        const spot = findSpot();
+        occupied.push({ x: spot.x, y: spot.y, w: bw, h: 320 });
+        return { ...b, x: spot.x, y: spot.y };
+      }),
+    );
+  }, [boards, settings.isCompact]);
 
   const finalTodoPos = todoPos || findFreeSpot();
   if (settings.showTodo && !todoPos) {
@@ -351,11 +523,7 @@ export default function App() {
               settings.alignment === "left" && "justify-start",
             )}
           >
-            <img
-              src="icons/tabshit-nobg.png"
-              className="w-10 h-10 drop-shadow-[0_4px_12px_rgba(255,255,255,0.1)]"
-              alt="Tabshit"
-            />
+            <div className="w-10 h-10" />
 
             <div className="flex items-center gap-1.5 bg-white/5 p-1.5 rounded-2xl border border-white/5 backdrop-blur-md shadow-2xl">
               <button
@@ -489,6 +657,14 @@ export default function App() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="ml-2 text-white/20 hover:text-white transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -767,22 +943,44 @@ function Board({
     top: board.y || 0,
     width: isCompact ? 280 : 340,
     transform: transform
-      ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
+      ? `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${isDragging ? 1.02 : 1})`
       : undefined,
+    transition: isDragging ? "box-shadow 0.2s, opacity 0.2s" : "transform 0.25s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s, opacity 0.2s",
     zIndex: isDragging ? 200 : 1,
-    opacity: isDragging ? 0.7 : 1,
+    opacity: isDragging ? 0.85 : 1,
+    boxShadow: isDragging
+      ? "0 20px 60px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.1)"
+      : undefined,
     willChange: isDragging ? "transform" : "auto",
   };
 
   const handleAddLink = (url) => {
     if (!url.trim()) return;
-    const formattedUrl = url.trim().startsWith("http")
-      ? url.trim()
-      : "https://" + url.trim();
+
+    let formattedUrl = url.trim();
+    if (
+      !formattedUrl.startsWith("http://") &&
+      !formattedUrl.startsWith("https://") &&
+      !formattedUrl.startsWith("chrome://") &&
+      !formattedUrl.startsWith("edge://")
+    ) {
+      formattedUrl = "https://" + formattedUrl;
+    }
+
+    // Check if URL already exists in this board
+    if (board.bookmarks.some((bm) => bm.url === formattedUrl)) {
+      setIsAddingLink(false);
+      return;
+    }
+
     let title = formattedUrl;
     try {
-      title = new URL(formattedUrl).hostname;
-    } catch (e) {}
+      const urlObj = new URL(formattedUrl);
+      title = urlObj.hostname.replace("www.", "");
+    } catch (e) {
+      // If URL is still invalid, don't add it
+      if (!formattedUrl.includes(".")) return;
+    }
 
     onUpdate({
       ...board,
@@ -821,7 +1019,7 @@ function Board({
       >
         <h3
           className={cn(
-            "font-bold flex items-center gap-3 blur-sensitive text-[var(--color-board-text)]",
+            "font-bold flex items-center gap-3 blur-sensitive text-[var(--color-board-text)] truncate flex-1",
             isCompact ? "text-sm" : "text-base",
           )}
         >
@@ -1155,7 +1353,7 @@ function GhostBoardOverlay({
           px < box.x + box.w &&
           px + boardWidth > box.x &&
           py < box.y + box.h &&
-          py + (isCompact ? 80 : 100) > box.y,
+          py + (isCompact ? 100 : 120) > box.y,
       );
 
       if (!overlaps) {
