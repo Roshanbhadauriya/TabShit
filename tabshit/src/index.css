@@ -1,0 +1,272 @@
+@import "tailwindcss";
+
+/* Roomier spacing only when the window is tall enough (most small laptops are not). */
+@custom-variant tall (@media (min-height: 820px));
+
+@theme {
+  --color-accent-blue: #00d2ff;
+  --color-accent-purple: #9d50bb;
+  --color-glass-bg: rgba(20, 20, 20, 0.4);
+  --color-glass-border: rgba(255, 255, 255, 0.08);
+}
+
+:root {
+  --bg-color: #0f0a1e;
+  --transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body {
+  @apply bg-[#0f0a1e] text-white min-h-screen overflow-hidden flex flex-col;
+  font-family: "Inter", sans-serif;
+}
+
+.bg-canvas {
+  @apply fixed inset-0 z-[-1];
+  background-image:
+    radial-gradient(at 0% 0%, rgba(0, 242, 254, 0.05) 0, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(79, 172, 254, 0.05) 0, transparent 50%);
+}
+
+/*
+ * Wallpaper: an <img> with only inset:0 renders at its natural size
+ * (e.g. 2912x1632) and looks zoomed in on laptops. Give it the viewport's
+ * size explicitly and let object-fit crop it evenly around the centre.
+ */
+.bg-image {
+  @apply fixed z-[-2] opacity-60 bg-black transition-opacity duration-500;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  max-width: none;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
+  user-select: none;
+}
+
+.glass-card {
+  @apply backdrop-blur-[30px] border border-white/8 rounded-[16px];
+  background-color: rgb(0 0 0 / var(--board-alpha, 0.25));
+  transition:
+    background-color 0.3s,
+    border-color 0.3s;
+}
+
+.glass-card:hover {
+  @apply border-white/15;
+  background-color: rgb(0 0 0 / min(1, calc(var(--board-alpha, 0.25) + 0.1)));
+}
+
+/* Settings / appearance side panel. Scrolls inside instead of spilling over the dock. */
+.side-panel {
+  @apply fixed z-[200] flex flex-col bg-[#0f0f0f] border border-white/10 rounded-[24px] shadow-2xl;
+  top: 1rem;
+  bottom: 6rem;
+  right: 1rem;
+  width: min(380px, calc(100vw - 2rem));
+  padding: 1.5rem;
+  animation: panel-in 0.25s ease-out;
+}
+
+@media (min-height: 820px) {
+  .side-panel {
+    top: 2.5rem;
+    bottom: 8rem;
+    right: 2.5rem;
+    padding: 2rem;
+  }
+}
+
+/*
+ * Search <-> boards cross-fade. Visibility flips only after the fade-out
+ * finishes (delayed transition), and instantly when fading in, so neither
+ * layer pops and the hidden one never catches clicks.
+ */
+.search-layer,
+.board-layer {
+  --fade: 220ms;
+  transition:
+    opacity var(--fade) ease,
+    translate var(--fade) cubic-bezier(0.2, 0, 0, 1),
+    visibility 0s linear var(--fade);
+}
+
+.search-layer {
+  opacity: 0;
+  translate: 0 -8px;
+  visibility: hidden;
+}
+.search-layer.is-visible {
+  opacity: 1;
+  translate: 0 0;
+  visibility: visible;
+  transition:
+    opacity var(--fade) ease,
+    translate var(--fade) cubic-bezier(0.2, 0, 0, 1),
+    visibility 0s;
+}
+
+.board-layer.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+.board-layer:not(.is-hidden) {
+  transition:
+    opacity var(--fade) ease,
+    visibility 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-layer,
+  .board-layer {
+    --fade: 0ms;
+  }
+  .side-panel {
+    animation: none;
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Windows 11 style range slider (volume-flyout look). Fill width comes from --fill. */
+.win-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 20px;
+  background: transparent;
+  cursor: pointer;
+  min-width: 0;
+}
+.win-slider:focus {
+  outline: none;
+}
+.win-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-accent) 0,
+    var(--color-accent) var(--fill, 50%),
+    rgba(255, 255, 255, 0.45) var(--fill, 50%),
+    rgba(255, 255, 255, 0.45) 100%
+  );
+}
+.win-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: -8px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 0 0 5px #454545,
+    0 1px 3px rgba(0, 0, 0, 0.5);
+  transition: box-shadow 0.15s ease;
+}
+.win-slider:hover::-webkit-slider-thumb {
+  box-shadow:
+    inset 0 0 0 4px #454545,
+    0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.win-slider:active::-webkit-slider-thumb {
+  box-shadow:
+    inset 0 0 0 6px #454545,
+    0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.win-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    inset 0 0 0 5px #454545,
+    0 0 0 2px #fff;
+}
+.win-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.45);
+}
+.win-slider::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-accent);
+}
+.win-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 5px #454545;
+}
+
+/* Privacy Mode - only hides boards/content, wallpaper stays untouched */
+.privacy-mode main {
+  @apply opacity-0 pointer-events-none;
+}
+
+@keyframes periodic-bounce {
+  0%,
+  90%,
+  100% {
+    transform: translateY(0);
+  }
+  92% {
+    transform: translateY(-10px);
+  }
+  94% {
+    transform: translateY(0);
+  }
+  96% {
+    transform: translateY(-5px);
+  }
+  98% {
+    transform: translateY(0);
+  }
+}
+
+.attention-bounce {
+  animation: periodic-bounce 10s ease-in-out infinite;
+}
+
+/* Custom Webkit Scrollbar */
+.custom-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+.custom-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.overflow-clip-visible {
+  overflow-x: clip;
+  overflow-y: visible;
+}
